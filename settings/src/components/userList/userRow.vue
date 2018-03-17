@@ -2,31 +2,34 @@
 	<div class="row">
 		<div class="avatar"><img alt="" width="32" height="32" :src="generateAvatar(user.name, 32)" :srcset="generateAvatar(user.name, 64)+' 2x, '+generateAvatar(user.name, 128)+' 4x'"></div>
 		<div class="name">{{user.name}}</div>
-		<div class="displayName">
-			<input :id="'displayName'+user.name+rand" type="text" :value="user.displayname" @input="updateDisplayName($event.target.value)"
+		<div class="displayName" :class="{'icon-loading-small': loading.displayName}">
+			<input :id="'displayName'+user.name+rand" type="text" :disabled="loading.displayName||loading.all"
+				   :value="user.displayname" @input="updateDisplayName($event.target.value)"
 					autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" />
 			<input type="submit" class="icon-confirm" value="" />
 		</div>
-		<div class="password">
-			<input :id="'password'+user.name+rand" type="password" placeholder="●●●●●●●●●●" value=""
-					autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" />
+		<div class="password" :class="{'icon-loading-small': loading.password}">
+			<input :id="'password'+user.name+rand" type="password" :disabled="loading.password||loading.all"
+				   placeholder="●●●●●●●●●●" value="" :minlength="minPasswordLength"
+				   autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" />
 			<input type="submit" class="icon-confirm" value="" />
 		</div>
-		<div class="mailAddress">
-			<input :id="'mailAddress'+user.name+rand" type="text" :value="user.email" @input="updateEmail($event.target.value)"
-					autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" />
+		<div class="mailAddress" :class="{'icon-loading-small': loading.mailAddress}">
+			<input :id="'mailAddress'+user.name+rand" type="text" :disabled="loading.mailAddress||loading.all"
+				   :value="user.email" @input="updateEmail($event.target.value)"
+				   autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" />
 			<input type="submit" class="icon-confirm" value="" />
 		</div>
-		<div class="groups">
-			<multiselect :value="userGroups" :options="groups"
+		<div class="groups" :class="{'icon-loading-small': loading.groups}">
+			<multiselect :value="userGroups" :options="groups" :disabled="loading.groups||loading.all"
 						 tag-placeholder="create" :placeholder="t('settings', 'Add user in group')"
 						 label="name" track-by="id" class="multiselect-vue"
 						 :multiple="true" :taggable="true" :close-on-select="false"
 						 @tag="createGroup" @input="setUserGroups">
 			</multiselect>
 		</div>
-		<div class="subadmins" v-if="subAdminsGroups.length>0">
-			<multiselect :value="userSubAdminsGroups" :options="subAdminsGroups"
+		<div class="subadmins" v-if="subAdminsGroups.length>0" :class="{'icon-loading-small': loading.subadmins}">
+			<multiselect :value="userSubAdminsGroups" :options="subAdminsGroups" :disabled="loading.subadmins||loading.all"
 						 :placeholder="t('settings', 'Set user as admin for')"
 						 label="name" track-by="id" class="multiselect-vue"
 						 :multiple="true" :close-on-select="false"
@@ -35,8 +38,8 @@
 			</multiselect>
 		</div>
 		<div v-if="settings.recoveryAdminEnabled" ></div>
-		<div class="quota">
-			<multiselect :value="userQuota" :options="quotaOptions"
+		<div class="quota" :class="{'icon-loading-small': loading.quota}">
+			<multiselect :value="userQuota" :options="quotaOptions" :disabled="loading.quota||loading.all"
 						 tag-placeholder="create" :placeholder="t('settings', 'Select user quota')"
 						 label="label" track-by="id" class="multiselect-vue"
 						 :allowEmpty="false" :taggable="true"
@@ -48,10 +51,10 @@
 		<div class="userBackend">{{user.backend}}</div>
 		<div class="lastLogin">{{user.lastLogin>0 ? OC.Util.relativeModifiedDate(user.lastLogin) : t('settings','Never')}}</div>
 		<div class="userActions">
-			<div class="toggleUserActions" v-if="OC.currentUser !== user.name && user.name !== 'admin'">
+			<div class="toggleUserActions" v-if="OC.currentUser !== user.name && user.name !== 'admin' && !loading">
 				<div class="icon-more" v-click-outside="hideMenu" @click="showMenu"></div>
 				<div class="popovermenu" :class="{ 'open': openedMenu }">
-					<popover-menu :menu="userActions"/>
+					<popover-menu :menu="userActions" />
 				</div>
 			</div>
 		</div>
@@ -81,7 +84,16 @@ export default {
 	data() {
 		return {
 			rand: parseInt(Math.random() * 1000),
-			openedMenu: false
+			openedMenu: false,
+			loading: {
+				all: false,
+				displayName: false,
+				password: false,
+				mailAddress: false,
+				groups: false,
+				subadmins: false,
+				quota: false
+			}
 		}
 	},
 	computed: {
@@ -131,6 +143,11 @@ export default {
 			let userQuota = this.quotaOptions.find(quota => quota.id === this.user.quota);
 			return userQuota ? userQuota : {id:this.user.quota, label:this.user.quota}; // unlimited
 		},
+
+		/* PASSWORD POLICY? */
+		minPasswordLength() {
+			return this.$store.getters.getPasswordPolicyMinLength;
+		}
 	},
 	methods: {
 		/* MENU HANDLING */
@@ -166,11 +183,12 @@ export default {
 		 * @returns {Promise}
 		 */
 		updateDisplayName: _.debounce(function(displayName) {
+			this.loading.displayName = true;
 			this.$store.dispatch('setUserData', {
 				name: this.user.name, 
 				key:'displayname',
 				value: displayName
-			})
+			}).then(() => this.loading.displayName = false);
 		}, 500),
 
 		/**
@@ -180,11 +198,12 @@ export default {
 		 * @returns {Promise}
 		 */
 		updateEmail: _.debounce(function(mailAddress) {
+			this.loading.mailAddress = true;
 			this.$store.dispatch('setUserData', {
 				name: this.user.name,
 				key:'email',
 				value: mailAddress
-			})
+			}).then(() => this.loading.mailAddress = false);
 		}, 500),
 
 		/**
@@ -194,7 +213,8 @@ export default {
 		 * @returns {Promise}
 		 */
 		createGroup(gid) {
-			this.$store.commit('createGroup', gid);
+			this.loading = {groups:true, subadmins:true}
+			this.$store.commit('createGroup', gid).then(() => this.loading = {groups:false, subadmins:false});
 			return this.$store.getters.getGroups[this.groups.length];
 		},
 
@@ -206,9 +226,11 @@ export default {
 		 */
 		setUserGroups(groups) {
 			if (Array.isArray(groups) && groups.length > 0) {
+				this.loading.groups = true;
 				groups = groups.map(group => group.id); // convert objects into array
 				let name = this.user.name;
-				return this.$store.dispatch('setUserGroups', {name, groups});
+				return this.$store.dispatch('setUserGroups', {name, groups})
+					.then(() => this.loading.groups = false);
 			}
 			return false;
 		},
@@ -221,9 +243,11 @@ export default {
 		 */
 		setUserSubAdminsGroups(groups) {
 			if (Array.isArray(groups) && groups.length > 0) {
+				this.loading.subadmins = true;
 				groups = groups.map(group => group.id); // convert objects into array
 				let name = this.user.name;
-				return this.$store.dispatch('setUserSubAdmins', {name, groups});
+				return this.$store.dispatch('setUserSubAdmins', {name, groups})
+					.then(() => this.loading.subadmins = false);
 			}
 			return false;
 		},
@@ -236,13 +260,14 @@ export default {
 		 */
 		setUserQuota(quota = 'none') {
 			let name = this.user.name;
+			this.loading.quota = true;
 			// ensure we only send the preset id
 			quota = quota.id ? quota.id : quota;
 			this.$store.dispatch('setUserData', {
 				name: this.user.name, 
 				key: 'quota',
 				value: quota
-			})
+			}).then(() => this.loading.quota = false);
 			return quota;
 		},
 
